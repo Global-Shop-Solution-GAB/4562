@@ -1,0 +1,236 @@
+Program.Sub.ScreenSU.Start
+Gui.Form..Create
+Gui.Form..Size(2670,2010)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..BackColor(-2147483633)
+Gui.Form..MousePointer(0)
+Gui.Form..Event(UnLoad,Form_UnLoad)
+Gui.Form.txt1.Create(TextBox,"",True,1215,300,0,225,570,True,0,"Arial",8,-2147483643,1)
+Gui.Form.lbl1.Create(Label,"Terminal",True,1935,255,0,225,240,True,0,"Arial",8,-2147483633,0)
+Gui.Form.cmdOK.Create(Button)
+Gui.Form.cmdOK.Size(855,375)
+Gui.Form.cmdOK.Position(240,990)
+Gui.Form.cmdOK.Caption("OK")
+Gui.Form.cmdOK.Event(Click,cmdOK_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+v.Local..BulkDeclareString(sError, sSQL, sRet, sLot, sBin, sHeat, sSerial_Number, sJob, sSuffix, sPart, sMap)
+v.Local..BulkDeclareLong(iCnt1)
+
+F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass,300)
+'ONLY FIRE ON CERTIFICATE OF COMPLIANCE
+
+f.Intrinsic.Control.If(v.Caller.Hook,=,16090,and,v.Passed.009001,=,"000114")
+
+	f.ODBC.Connection!con.Execute("Delete from GCG_4562_ParentPart")
+	f.ODBC.Connection!con.Execute("Delete from GCG_4562_BreakDown")
+	f.Data.DataTable.CreateFromSQL("Parent","con","Select * from GCG_4562_ParentPart",true)
+	
+	f.Intrinsic.String.Build("Select distinct Order_NO, Order_Suffix, Record_No from V_BI_Packing_list where Terminal = '{0}' and RPTID = '000051' and Record_Type = 'S'",V.Caller.Terminal,v.Local.sSQL)
+	f.Data.DataTable.CreateFromSQL("Order_Line","con",v.Local.sSQL,true)
+	
+	'For each line of order in the shipment, get Parent data
+	f.Intrinsic.Control.For(v.Local.iCnt1,0,v.DataTable.Order_Line.RowCount--,1)
+		f.Intrinsic.Control.CallSub("Populate_Parent","Order_No",v.DataTable.Order_Line(v.Local.iCnt1).Order_No!FieldValString,"Order_Suffix",v.DataTable.Order_Line(v.Local.iCnt1).Order_Suffix!FieldValString,"Order_Line",v.DataTable.Order_Line(v.Local.iCnt1).Record_No!FieldValString)			
+	f.Intrinsic.Control.Next(v.Local.iCnt1)
+	v.Local.sMap.Set("Part@!@Part*!*LOT@!@LOT*!*BIN@!@BIN*!*HEAT@!@HEAT*!*SERIAL@!@SERIAL*!*JOB@!@JOB*!*JOB_SUFFIX@!@JOB_SUFFIX*!*ORDER_NO@!@ORDER_NO*!*ORDER_SUFFIX@!@ORDER_SUFFIX*!*ORDER_LINE@!@ORDER_LINE*!*ORDER_LINE_TEXT@!@ORDER_LINE_TEXT*!*Quality_user1@!@Quality_user1")
+	Function.Data.DataTable.SaveToDB("Parent", "con", "GCG_4562_ParentPart", "", 128, v.Local.sMap)
+		
+'ONLY FIRE ON CERTIFICATE OF COMPLIANCE	
+f.Intrinsic.Control.EndIf
+f.ODBC.Connection!con.Close
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4562_Preprocessor.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+V.Local.sError.Declare(String)
+
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4562_Preprocessor.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Unload.End
+
+Program.Sub.Populate_Parent.Start
+F.Intrinsic.Control.SetErrorHandler("Populate_Parent_Err")
+F.Intrinsic.Control.ClearErrors
+v.Local..BulkDeclareString(sError, sSQL, sMap, sPart, sLot, sBin, sHeat, sSerial_Number, sJob, sSuffix, sOrderText, sRet, sOrder_line, sQuality, sHold)
+v.Local..BulkDeclareLong(i)
+
+
+f.Intrinsic.String.Left(v.Args.Order_Line,3,v.Local.sOrder_line)
+f.Intrinsic.String.Build("select part, lot, bin, heat, serial_number from V_Item_history where Code_Transaction = 'O35' and Order_No = '{0}' and Order_suffix = '{1}' and Order_line = '{2}'",v.Args.Order_No,v.Args.Order_Suffix, v.Local.sOrder_line,v.Local.sSQL)
+
+f.Intrinsic.Control.If(v.DataTable.SearchLotBin.Exists,=,True)	
+	f.Data.DataTable.Close("SearchLotBin")
+f.Intrinsic.Control.EndIf
+
+f.Data.DataTable.CreateFromSQL("SearchLotBin","con",v.Local.sSQL,true)
+f.Intrinsic.Control.If(v.DataTable.SearchLotBin.Rowcount,>,0)
+	'Find lot, bin, heat, serial based on Order, Order_suffix, Order_Line
+	v.Local.sPart.Set(v.DataTable.SearchLotBin(0).Part!FieldvalString)
+	v.Local.sLot.Set(v.DataTable.SearchLotBin(0).Lot!FieldvalString)
+	v.Local.sBin.Set(v.DataTable.SearchLotBin(0).Bin!FieldvalString)
+	v.Local.sHeat.Set(v.DataTable.SearchLotBin(0).Heat!FieldvalString)
+	v.Local.sSerial_Number.Set(v.DataTable.SearchLotBin(0).Serial_Number!FieldvalString)
+	'Check customer with method FIFO or LIFO to determine which job to be selected. This is currently FIFO
+	f.Intrinsic.String.Build("Select TOP 1 Job, Suffix from V_Item_History where Part = '{0}' and Lot = '{1}' and Bin = '{2}' and Heat = '{3}' and Serial_Number = '{4}' and Code_Transaction = 'J52' ORDER BY DATE_HISTORY ASC",v.Local.sPart, v.Local.sLot, v.Local.sBin, v.Local.sHeat, v.Local.sSerial_Number, v.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRO("rstJobSuffix",V.Local.sSQL)
+	F.Intrinsic.Control.If(V.ODBC.con!rstJobSuffix.EOF,<>,True)
+		v.Local.sJob.Set(v.ODBC.con!rstJobSuffix.FieldValString!Job)
+		v.Local.sSuffix.Set(v.ODBC.con!rstJobSuffix.FieldValString!Suffix)
+	F.Intrinsic.Control.EndIf
+	f.ODBC.con!rstJobSuffix.Close
+
+f.Intrinsic.Control.EndIf
+
+'Get control quality
+f.Intrinsic.String.Build("Select user1 from quality where job = '{0}' and suffix = '{1}'",v.Local.sJob,v.Local.sSuffix,v.Local.sSQL)
+f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL,v.Local.sQuality)
+f.Intrinsic.String.Replace(v.Local.sQuality,"*!*","",v.Local.sQuality)
+f.Intrinsic.String.Replace(v.Local.sQuality,"#$#","_",v.Local.sQuality)
+
+
+'Get Order_ln_text
+f.ODBC.Connection!con.Execute("Delete from GCG_4562_Text")
+f.Intrinsic.String.Build("select Text from Order_ln_Text where Order_Num = '{0}' and Order_Line ='{1}' and order_type = '2'",v.Args.Order_No.Trim, v.Args.Order_Line.Trim,v.Local.sSQL)
+f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL,v.Local.sHold)
+F.Intrinsic.String.Build("iNSERT INTO GCG_4562_TEXT (TEXT) VALUES('{0}')",V.Local.sHold,v.Local.sSQL)
+f.ODBC.Connection!con.Execute(v.Local.sSQL)
+f.Intrinsic.String.Build("select Text from Order_ln_Text where Order_Num = '{0}' and Order_Line ='{1}' and order_type = '9999'",v.Args.Order_No.Trim, v.Args.Order_Line.Trim,v.Local.sSQL)
+f.ODBC.Connection!con.ExecuteAndReturn(v.Local.sSQL,v.Local.sOrderText)
+F.Intrinsic.String.Split(V.Local.sOrderText,v.Ambient.NewLine,v.Local.sOrderText)
+f.Intrinsic.Control.For(v.Local.i,0,v.Local.sOrderText.UBound,1)
+	F.Intrinsic.String.Build("iNSERT INTO GCG_4562_TEXT (TEXT) VALUES('{0}')",V.Local.sOrderText(v.Local.i),v.Local.sSQL)
+	f.ODBC.Connection!con.Execute(v.Local.sSQL)
+f.Intrinsic.Control.Next(v.Local.i)
+
+	
+
+F.Data.DataTable.AddRow("Parent","Part",v.Local.sPart,"Lot",v.Local.sLot,"Bin",v.Local.sBin,"Heat",v.Local.sHeat,"Serial",v.Local.sSerial_Number,"Job",v.Local.sJob,"Job_Suffix",v.Local.sSuffix,"Order_No",v.Args.Order_No,"Order_Suffix",v.Args.Order_Suffix,"Order_Line",v.Args.Order_Line,"Order_Line_Text",v.Local.sOrderText,"Quality_user1",v.Local.sQuality)
+
+f.Intrinsic.Control.CallSub(Populate_Job_Operations,"Job",v.Local.sJob,"Suffix",v.Local.sSuffix)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Populate_Parent_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4562_Preprocessor.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Populate_Parent.End
+
+Program.Sub.Populate_Job_Operations.Start
+F.Intrinsic.Control.SetErrorHandler("Populate_Job_Operations_Err")
+F.Intrinsic.Control.ClearErrors
+
+v.Local..BulkDeclareString(sError, sSQL,sMap, sMatHardness, sCertCode)
+V.Local..BulkDeclareLong(iCnt)
+
+
+'Material
+f.Intrinsic.String.Build("Select distinct i1.Job as Job, i1.Suffix as Suffix, i1.part as Part,'M' as LMO, i3.Text_Info1 as Text1_Inv_Mst2,usr_field_1 as User1_Item_Master, v.Name_Vendor as Name_Vendor, i1.Purchase_Order as PO,PO_LINE, i1.Cert_Code as CertCode_Item_Master from Item_History i1 join item_hist_usr i2 on i1.Date_history = i2.key_date and i1.time_item_history = i2.key_time left join PO_header p on i1.Purchase_Order = p.Purchase_Order left join Inventory_mst2 i3 on i1.Part = i3.Part and i1.Location = i3.Location left join V_Vendor_Master v on p.Vendor = v.Vendor where  I1.JOB = '{0}' AND I1.SUFFIX = '{1}' AND I1.CODE_TRANSACTION = 'J55' and name_vendor <> ''",v.Args.Job, v.Args.Suffix,v.Local.sSQL)
+f.Intrinsic.Control.If(v.DataTable.Materials.Exists,=,True)
+	f.Data.DataTable.Close("Materials")
+f.Intrinsic.Control.EndIf
+f.Data.DataTable.CreateFromSQL("Materials","con",v.Local.sSQL,true)
+v.Local.sMap.Set("Job@!@Job*!*Suffix@!@Suffix*!*Part@!@Part*!*LMO@!@LMO*!*Text1_Inv_Mst2@!@Text1_Inv_Mst2*!*User1_Item_Master@!@User1_Item_Master*!*Name_Vendor@!@Name_Vendor*!*PO@!@PO*!*PO_LINE@!@PO_LINE*!*CertCode_Item_Master@!@CertCode_Item_Master")
+Function.Data.DataTable.SaveToDB("Materials", "con", "GCG_4562_BreakDown", "", 128, v.Local.sMap)
+
+
+'Outside service - Third Party section
+f.Intrinsic.String.Build("Select distinct i1.Job as Job, i1.Suffix as Suffix, i1.part as Part,'O' as LMO, v.Name_Vendor as Name_Vendor, i1.Purchase_Order as PO,PO_LINE from Item_History i1 join item_hist_usr i2 on i1.Date_history = i2.key_date and i1.time_item_history = i2.key_time left join PO_header p on i1.Purchase_Order = p.Purchase_Order left join V_Vendor_Master v on p.Vendor = v.Vendor where  I1.JOB = '{0}' AND I1.SUFFIX = '{1}' AND I1.CODE_TRANSACTION = 'R10' and name_vendor <> ''",v.Args.Job, v.Args.Suffix,v.Local.sSQL)
+f.Intrinsic.Control.If(v.DataTable.Outside.Exists,=,True)
+	f.Data.DataTable.Close("Outside")
+f.Intrinsic.Control.EndIf
+
+f.Data.DataTable.CreateFromSQL("Outside","con",v.Local.sSQL,true)
+v.Local.sMap.Set("Job@!@Job*!*Suffix@!@Suffix*!*Part@!@Part*!*LMO@!@LMO*!*Name_Vendor@!@Name_Vendor*!*PO@!@PO*!*PO_LINE@!@PO_LINE")
+Function.Data.DataTable.SaveToDB("Outside", "con", "GCG_4562_BreakDown", "", 128, v.Local.sMap)
+
+	
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Populate_Job_Operations_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4562_Preprocessor.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Populate_Job_Operations.End
+
+Program.Sub.Form_UnLoad.Start
+f.ODBC.Connection!con.Close
+f.Intrinsic.Control.End
+
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.cmdOK_Click.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+v.Local..BulkDeclareString(sError, sSQL, sRet, sLot, sBin, sHeat, sSerial_Number, sJob, sSuffix, sPart, sMap)
+v.Local..BulkDeclareLong(iCnt1)
+	f.ODBC.Connection!con.Execute("Delete from GCG_4562_ParentPart")
+	f.ODBC.Connection!con.Execute("Delete from GCG_4562_BreakDown")
+	f.Data.DataTable.CreateFromSQL("Parent","con","Select * from GCG_4562_ParentPart",true)
+	
+	f.Intrinsic.String.Build("Select distinct Order_NO, Order_Suffix, Record_No from V_BI_Packing_list where Terminal = '{0}' and RPTID = '000051' and Record_Type = 'S'",v.Screen.Form!txt1.Text.Trim,v.Local.sSQL)
+	f.Data.DataTable.CreateFromSQL("Order_Line","con",v.Local.sSQL,true)
+	
+	'For each line of order in the shipment, get Parent data
+	f.Intrinsic.Control.For(v.Local.iCnt1,0,v.DataTable.Order_Line.RowCount--,1)
+		f.Intrinsic.Control.CallSub("Populate_Parent","Order_No",v.DataTable.Order_Line(v.Local.iCnt1).Order_No!FieldValString,"Order_Suffix",v.DataTable.Order_Line(v.Local.iCnt1).Order_Suffix!FieldValString,"Order_Line",v.DataTable.Order_Line(v.Local.iCnt1).Record_No!FieldValString)			
+	f.Intrinsic.Control.Next(v.Local.iCnt1)
+	v.Local.sMap.Set("Part@!@Part*!*LOT@!@LOT*!*BIN@!@BIN*!*HEAT@!@HEAT*!*SERIAL@!@SERIAL*!*JOB@!@JOB*!*JOB_SUFFIX@!@JOB_SUFFIX*!*ORDER_NO@!@ORDER_NO*!*ORDER_SUFFIX@!@ORDER_SUFFIX*!*ORDER_LINE@!@ORDER_LINE*!*ORDER_LINE_TEXT@!@ORDER_LINE_TEXT*!*Quality_user1@!@Quality_user1")
+	Function.Data.DataTable.SaveToDB("Parent", "con", "GCG_4562_ParentPart", "", 128, v.Local.sMap)
+
+F.Intrinsic.UI.Msgbox("Completed")
+f.Intrinsic.Control.CallSub(form_unload)
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4562_GetDataForTest.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdOK_Click.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$$}$8/16/2017 9:02:27 AM$}$False
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$This will be a custom GAB script that will run from a custom Menu Item under Bill of Material -> File -> Custom Cobalt BOM Import.  The user will navigate to the xml file that needs to be loaded into Global Shop.  Once the xml is parsed there will be a search in Global Shop to see if a BOM already exists for that Part Number.  If one already exists a compare screen will display showing the differences between the two.  If one does not exist then the screen will display the BOM as it will be uploaded into Global Shop.  Any parts that are listed in the BOM that are not Inventory Parts will be highlighted in Yellow.  If there are any parts not in inventory the user will have the option to click the create Parts button to generate those parts in Global Shop.  If the BOM exists in Global shop then any differences on the new import will be highlighted in Red.  After the Parts have been created then the Upload button will upload and override any previous BOM for that part.}$12:00:00 AM
+Program.Sub.Comments.End
